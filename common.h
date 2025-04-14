@@ -1,0 +1,63 @@
+#ifndef COMMON_H
+#define COMMON_H
+
+// Used to access the controls array given to effect functions 
+enum Controls {
+  RgbSwitch,
+  Red,
+  Green,
+  Blue,
+  Param1,
+  Param1In,
+  Param2,
+  Param2In,
+  EncoderVal,
+  NumControls
+};
+
+// Used to access the matrix values array given to effect functions
+enum Matrix {
+  MatrixWidth,
+  MatrixHeight,
+  PosV,
+  PosH,
+  Orient,
+  Layout,
+};
+
+// Enum for each effect mode
+enum Mode {
+  SetupMatrix,
+  DefaultEffect,
+  Pulse,
+  Trails,
+  Rainbow,
+  RainbowPulse,
+  RainbowTrails,
+  Chase,
+  Bounce,
+  Sparkle,
+  Circles2d,
+  Ascii2d,
+};
+
+// The maximum number of LEDS a strip/ matrix can have
+#define MAX_MATRIX_SIZE 256
+
+// EEPROM data offsets //
+#define EEPROM_CURRENT_EFFECT 0
+#define EEPROM_ENCODER_OFFSET 1
+
+/*
+ * KOLOR saves the matrix values in eeprom for persistent size and orientation on reboots
+ * Saved as:
+ * 60: width
+ * 61: height
+ * 62: top/bottom
+ * 63: left/right
+ * 64: row/column
+ * 65: zigzag/progressive
+ */
+#define EEPROM_MATRIX_OFFSET 60
+
+#endif
