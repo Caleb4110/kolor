@@ -119,10 +119,6 @@ void EncoderTracker::update(int32_t increment, uint8_t switched, Mode currentMod
     }
     _output_value_height = (_raw_value_height >> 2);
     if (_output_value_height != old_val) {
-      Serial.print("Changed height #");
-      Serial.print(_eeprom_address + 1);
-      Serial.print(" to ");
-      Serial.println(_output_value_height);
       EEPROM.write(_eeprom_address + 1, _output_value_height);
     }
   } else {
@@ -135,10 +131,6 @@ void EncoderTracker::update(int32_t increment, uint8_t switched, Mode currentMod
     }
     _output_value = (_raw_value >> 2);
     if (_output_value != old_val) {
-      Serial.print("Changed #");
-      Serial.print(_eeprom_address);
-      Serial.print(" to ");
-      Serial.println(_output_value);
       EEPROM.write(_eeprom_address, _output_value);
     }
   }

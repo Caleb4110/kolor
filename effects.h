@@ -11,7 +11,7 @@
 
 //===================================UTILITIES=====================================//
 // Color function for FastLED library
-CRGB color(bool use_rgb, uint8_t r_or_h, uint8_t g_or_s, uint8_t b_or_v);
+inline CRGB color(bool use_rgb, uint8_t r_or_h, uint8_t g_or_s, uint8_t b_or_v);
 
 
 //====================================SETTINGS=====================================//
@@ -134,23 +134,6 @@ NOTE: To use the external clock, turn the `Param 2` knob hard left. KOLOR will
 then take the external clock as input for triggering a chase.
 */
 void chase(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]);
-
-/*
-| Parameter       | Usage                             |
-|---------------  | --------------------------------- |
-| HSV/RGB         | Switch between HSV & RGB lighting |
-| Red/Hue         | Red/hue value                     |
-| Green/Sat       | Green/sat value                   |
-| Blue/Val        | Blue/val value                    |
-| Param 1         | Bounce speed                      |
-| Param 2         | Manual bounce trigger over 50%    |
-| Select          | Fade speed                        |
-| Ext. Clock      | Bounce trigger                    |
-
-NOTE: To use the external clock, turn the `Param 2` knob hard left. KOLOR will
-then take the external clock as input for triggering a bounce.
-*/
-void bounce(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]);
 
 /*
 | Parameter       | Usage                             |

@@ -1,9 +1,9 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-// Used to access the controls array given to effect functions 
-enum Controls {
-  RgbSwitch,
+// Used to access the the analog controls array
+// And also used to access values in effect functions
+enum AnalogControls {
   Red,
   Green,
   Blue,
@@ -11,8 +11,14 @@ enum Controls {
   Param1In,
   Param2,
   Param2In,
-  EncoderVal,
-  NumControls
+  NumAnalogControls
+};
+
+// Used to access values in effect functions
+enum OtherControls {
+  RgbSwitch = 7,
+  EncoderVal = 8,
+  NumOtherControls = 2
 };
 
 // Used to access the matrix values array given to effect functions
@@ -35,7 +41,6 @@ enum Mode {
   RainbowPulse,
   RainbowTrails,
   Chase,
-  Bounce,
   Sparkle,
   Circles2d,
   Ascii2d,
