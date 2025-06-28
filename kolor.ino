@@ -44,6 +44,9 @@ EventSwitch sEncoderButton(4, INPUT_PULLUP);
 CRGB* leds = nullptr;
 FastLED_NeoMatrix *matrix = nullptr;
 
+// The shape to use for the 2D shape effect
+uint8_t shape = 0;
+
 /*
 Keep the following in sync with the number of modes:
 - NUM_MODES
@@ -174,9 +177,11 @@ bool parseInput(char *input) {
         shouldRestart = true;
       }
       else if (strcmp(key, "layout") == 0) {
-        Serial.println(value);
         matrix_layout = (uint8_t) strtoul(value, NULL, 10);
         shouldRestart = true;
+      }
+      else if (strcmp(key, "shape") == 0) {
+        shape = (uint8_t) strtoul(value, NULL, 10);
       }
     }
   }
@@ -378,7 +383,8 @@ void loop() {
     analogControls[Param2].value(), 
     analogControls[Param2In].value(),
     sRgbSwitch.value(),
-    effect_param
+    effect_param,
+    shape
   };
 
   // Combine all matrix values into one array

@@ -18,7 +18,8 @@ enum AnalogControls {
 enum OtherControls {
   RgbSwitch = 7,
   EncoderVal = 8,
-  NumOtherControls = 2
+  NumOtherControls = 2,
+  Shape = 9
 };
 
 // Used to access the matrix values array given to effect functions

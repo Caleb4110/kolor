@@ -501,12 +501,20 @@ void circles_2d(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsi
 
   // HSV or RGB
   if (controlVals[RgbSwitch]) {
-    matrix->drawCircle(x_pos, y_pos, radius, matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]));
+    if (controlVals[Shape]) {
+      matrix->drawRect(x_pos, y_pos, radius, radius, matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]));
+    } else {
+      matrix->drawCircle(x_pos, y_pos, radius, matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]));
+    }
   } else {
     CHSV hsv = CHSV(controlVals[Red], controlVals[Green], controlVals[Blue]);
     CRGB rgb;
     hsv2rgb_rainbow(hsv, rgb);  //convert HSV to RGB
-    matrix->drawCircle(x_pos, y_pos, radius, matrix->Color(rgb.r, rgb.g, rgb.b));
+    if (controlVals[Shape]) {
+      matrix->drawRect(x_pos, y_pos, radius, radius, matrix->Color(rgb.r, rgb.g, rgb.b));
+    } else {
+      matrix->drawCircle(x_pos, y_pos, radius, matrix->Color(rgb.r, rgb.g, rgb.b));
+    }
   }
 
   if ((clock - last_decay) >= 3) {
