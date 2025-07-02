@@ -202,25 +202,25 @@ void writeMatrixValuesToEEPROM(uint8_t width, uint8_t height, uint8_t pos_v, uin
 
 void writeAndReset(uint8_t width, uint8_t height, uint8_t pos_v, uint8_t pos_h, uint8_t orientation, uint8_t layout) {
   // Write all values to eeprom
-        writeMatrixValuesToEEPROM(  
-          width,    height,         pos_v, 
-          pos_h,    orientation,    layout
-        );
+  writeMatrixValuesToEEPROM(  
+    width,    height,         pos_v, 
+    pos_h,    orientation,    layout
+  );
 
-        // Save the new width and height to the encoder
-        sEncoderTrackers[SetupMatrix]
-          .storeToEncoder(new_width, new_height);
+  // Save the new width and height to the encoder
+  sEncoderTrackers[SetupMatrix]
+    .storeToEncoder(new_width, new_height);
 
-        // Light up panel to indicate a reset
-        FastLED.clear();
-        fill_rainbow_circular(
-          leds, new_height * new_width, 
-          127,  true
-        );
+  // Light up panel to indicate a reset
+  FastLED.clear();
+  fill_rainbow_circular(
+    leds, new_height * new_width, 
+    127,  true
+  );
 
-        // Reset the system
-        delay(250);
-        digitalWrite(0, LOW);
+  // Reset the system
+  delay(250);
+  digitalWrite(0, LOW);
 }
 
 void setup() {
@@ -276,7 +276,6 @@ void setup() {
     // It's a valid mode and can be used
     sMode = (Mode) modeFromEEPROM;
   }
-  sMode = DefaultEffect;
   //=====================MODE SETUP====================//
 }
 
