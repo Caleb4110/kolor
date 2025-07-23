@@ -36,9 +36,8 @@ enum Matrix {
 enum Mode {
   SetupMatrix,
   DefaultEffect,
-  Pulse,
+  //Pulse,
   Trails,
-  Rainbow,
   RainbowPulse,
   RainbowTrails,
   Chase,

@@ -60,7 +60,7 @@ void default_effect(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, 
 NOTE: To use the external clock, turn the `Select` knob left until LEDs stop flashing, KOLOR will
 then take the external clock as input for the pulse time.
 */
-void pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]);
+//void pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]);
 
 /*
 | Parameter       | Usage                             |
@@ -74,19 +74,6 @@ void pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned 
 | Select          | Trail time                        |
 */
 void trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]);
-
-/*
-| Parameter       | Usage                             |
-| --------------  | --------------------------------- |
-| HSV/RGB         | Unbound                           |
-| Red/Hue         | Hue shift                         |
-| Green/Sat       | Colour repeats                    |
-| Blue/Val        | Unbound                           |
-| Param 1         | Width                             |
-| Param 2         | Position                          |
-| Select          | Unbound                           |
-*/
-void rainbow(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]);
 
 /*
 | Parameter       | Usage                             |

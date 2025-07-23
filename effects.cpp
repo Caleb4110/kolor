@@ -1,3 +1,4 @@
+#include "crgb.h"
 #include "FastLED.h"
 #include "effects.h"
 
@@ -31,18 +32,26 @@ void clamp_led_block(uint16_t &width, uint16_t mid_point, uint16_t matrixSize, u
 // meaning they can function the same as the Red Green & Blue pots and inputs.
 uint8_t computeOutputValue(uint8_t potValue, uint8_t inputValue) {
   // Scale inputValue from range [0, 255] to [-1.0, 1.0]
-  float scale = map(inputValue, 0, 255, -1, 1);
+    float scale = (inputValue - 127.0f) / 127.0f;
 
-  // Compute new output by shifting around potValue
-  int output = potValue + scale * (255 - potValue);
+    // Compute new output by shifting around potValue
+    int output = potValue + scale * (255 - potValue);
 
-  // Clamp between 0 and 255
-  if (output < 0) output = 0;
-  if (output > 255) output = 255;
+    // Clamp between 0 and 255
+    if (output < 0) output = 0;
+    if (output > 255) output = 255;
 
-  return (uint8_t)output;
+    return (uint8_t)output;
 }
 
+bool fade_leds(CRGB* leds, uint16_t matrixSize, uint8_t fade_increment, unsigned long& last_fade, unsigned long clock, uint8_t fade_time) {
+    if ((clock - last_fade) >= fade_time) {
+        last_fade = clock;
+        fadeToBlackBy(leds, matrixSize, fade_increment);
+        return true;
+    }
+    return false;
+}
 
 //====================================SETTINGS=====================================//
 // Setup number of pixels for strip 
@@ -161,7 +170,7 @@ void default_effect(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, 
   
   FastLED.show();
 }
-
+/*
 // Pulsing LEDs with fade
 void pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]) {
   static unsigned long last_pulse, last_fade;
@@ -197,18 +206,14 @@ void pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned 
     should_render = true;
   }
 
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-    should_render = true;
-  }
+  should_render = fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
   
   // Render if required
   if (should_render) {
     FastLED.show();
   }
 }
+*/
 
 // A fading trail to moving LEDs
 void trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]) {
@@ -251,23 +256,8 @@ void trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned
     fadeToBlackBy(leds, matrixSize, fade_increment);
   }
 
-  FastLED.show();
-}
+  fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
 
-// Rainbow LEDs
-void rainbow(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]) {
-
-  // Parameters
-  uint16_t width = map((uint16_t)computeOutputValue(controlVals[Param1], controlVals[Param1In]), 0, 255, 1, matrixSize); // Total width for LED block
-  uint16_t mid_point = map((uint16_t)computeOutputValue(controlVals[Param2], controlVals[Param2In]), 0, 255, 0, matrixSize-1); // Midpoint for LED block
-
-  // Clamp start pixel and adjust width
-  uint8_t start_pixel;
-  clamp_led_block(width, mid_point, matrixSize, start_pixel);
-  
-  // Refresh the LEDS
-  FastLED.clear();
-  fill_rainbow(&leds[start_pixel], width, controlVals[Red], controlVals[Green]);
   FastLED.show();
 }
 
@@ -303,12 +293,7 @@ void rainbow_pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, u
     should_render = true;
   }
 
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-    should_render = true;
-  }
+  should_render = fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
   
   // Render if required
   if (should_render) {
@@ -341,11 +326,7 @@ void rainbow_trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, 
   // Refresh the LEDS
   fill_rainbow(&leds[start_pixel], width, controlVals[Red], controlVals[Green]);
 
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-  }
+  fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
 
   FastLED.show();
 }
@@ -439,12 +420,7 @@ void chase(CRGB* leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned 
     }
   }
 
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-    should_render = true;
-  }
+  should_render = fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
 
   if (should_render) {
     FastLED.show();
@@ -501,19 +477,33 @@ void circles_2d(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsi
 
   // HSV or RGB
   if (controlVals[RgbSwitch]) {
-    if (controlVals[Shape]) {
-      matrix->drawCircle(x_pos, y_pos, radius, matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]));
-    } else {
-      matrix->drawRect(x_pos, y_pos, 2*radius, 2*radius, matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]));
+    uint16_t col = matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]);
+    switch (controlVals[Shape]) {
+      case 0:
+        matrix->drawRect(x_pos, y_pos, 2*radius, 2*radius, col);
+        break;
+      case 1:
+        matrix->drawCircle(x_pos, y_pos, radius, col);
+        break;
+      case 2:
+        matrix->drawTriangle(x_pos, y_pos, x_pos-(radius>>1), y_pos-radius, x_pos+(radius>>1), y_pos-radius, col);
+        break;
     }
   } else {
     CHSV hsv = CHSV(controlVals[Red], controlVals[Green], controlVals[Blue]);
     CRGB rgb;
     hsv2rgb_rainbow(hsv, rgb);  //convert HSV to RGB
-    if (controlVals[Shape]) {
-      matrix->drawCircle(x_pos, y_pos, radius, matrix->Color(rgb.r, rgb.g, rgb.b));
-    } else {
-      matrix->drawRect(x_pos, y_pos, 2*radius, 2*radius, matrix->Color(rgb.r, rgb.g, rgb.b));
+    uint16_t col = matrix->Color(rgb.r, rgb.g, rgb.b);
+    switch (controlVals[Shape]) {
+      case 0:
+        matrix->drawRect(x_pos, y_pos, 2*radius, 2*radius, col);
+        break;
+      case 1:
+        matrix->drawCircle(x_pos, y_pos, radius, col);
+        break;
+      case 2:
+        matrix->drawTriangle(x_pos, y_pos, x_pos-(radius/2), y_pos-radius, x_pos+(radius/2), y_pos-radius, col);
+        break;
     }
   }
 

@@ -54,7 +54,7 @@ Keep the following in sync with the number of modes:
 - Mode enum (in common.h)
 - Function pointer array (below sEncoderTrackers declaration)
 */
-#define NUM_MODES 11
+#define NUM_MODES 9
 EncoderTracker sEncoderTrackers[NUM_MODES] = {
   EncoderTracker(EEPROM_MATRIX_OFFSET),
   EncoderTracker(EEPROM_ENCODER_OFFSET + 1),
@@ -65,17 +65,15 @@ EncoderTracker sEncoderTrackers[NUM_MODES] = {
   EncoderTracker(EEPROM_ENCODER_OFFSET + 6),
   EncoderTracker(EEPROM_ENCODER_OFFSET + 7),
   EncoderTracker(EEPROM_ENCODER_OFFSET + 8),
-  EncoderTracker(EEPROM_ENCODER_OFFSET + 9),
-  EncoderTracker(EEPROM_ENCODER_OFFSET + 10),
+  //EncoderTracker(EEPROM_ENCODER_OFFSET + 9),
 };
 
 // Function pointer array
 void (*modes[NUM_MODES]) (CRGB *, FastLED_NeoMatrix *, uint16_t, unsigned long, uint8_t, uint8_t[], uint8_t[]) = {
   setup_matrix,
   default_effect,
-  pulse,
+  //pulse,
   trails,
-  rainbow,
   rainbow_pulse,
   rainbow_trails,
   chase,
@@ -248,7 +246,8 @@ void setup() {
   // Matrix size, orientation, layout
   // If the eeprom width or height are valid then use them
   if ((eeprom_width > 0 && eeprom_width <= MAX_MATRIX_SIZE) && 
-      (eeprom_height > 0 && eeprom_height <= MAX_MATRIX_SIZE)) {
+      (eeprom_height > 0 && eeprom_height <= MAX_MATRIX_SIZE) && 
+      (eeprom_width * eeprom_height) <= MAX_MATRIX_SIZE) {
     matrix_width = eeprom_width;
     matrix_height = eeprom_height;
     matrix_size = matrix_width * matrix_height;
