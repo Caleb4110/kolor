@@ -19,7 +19,6 @@ enum OtherControls {
   RgbSwitch = 7,
   EncoderVal = 8,
   NumOtherControls = 2,
-  Shape = 9
 };
 
 // Used to access the matrix values array given to effect functions
@@ -30,6 +29,7 @@ enum Matrix {
   PosH,
   Orient,
   Layout,
+  Shape
 };
 
 // Enum for each effect mode
@@ -62,7 +62,9 @@ enum Mode {
  * 63: left/right
  * 64: row/column
  * 65: zigzag/progressive
+ * 66: shape
  */
 #define EEPROM_MATRIX_OFFSET 60
+#define EEPROM_MATRIX_NUM_FIELDS 7
 
 #endif

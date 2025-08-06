@@ -180,6 +180,7 @@ bool parseInput(char *input) {
       }
       else if (strcmp(key, "shape") == 0) {
         shape = (uint8_t) strtoul(value, NULL, 10);
+        EEPROM.write(EEPROM_MATRIX_OFFSET + Shape, shape);
       }
     }
   }
@@ -235,8 +236,8 @@ void setup() {
 
   //===================MATRIX SETUP====================//
   // Read all EEPROM values to local variables
-  uint8_t eeprom_vals[6];
-  for (uint8_t i = 0; i < 6; i++) {
+  uint8_t eeprom_vals[EEPROM_MATRIX_NUM_FIELDS];
+  for (uint8_t i = 0; i < EEPROM_MATRIX_NUM_FIELDS; i++) {
     eeprom_vals[i] = EEPROM.read(EEPROM_MATRIX_OFFSET + i);
   }
 
@@ -253,6 +254,10 @@ void setup() {
     matrix_size = matrix_width * matrix_height;
     sEncoderTrackers[SetupMatrix].storeToEncoder(matrix_width, matrix_height);
   }
+
+  // Shape for shape effect
+  uint8_t eeprom_shape = eeprom_vals[Shape];
+  if (eeprom_shape > 0 && eeprom_shape <= 2) shape = eeprom_shape;
 
   // If the orientation, layout or pixel positions are valid, then use them
   matrix_pos_v = (eeprom_vals[PosV] == NEO_MATRIX_TOP || eeprom_vals[PosV] == NEO_MATRIX_BOTTOM) ? eeprom_vals[PosV] : matrix_pos_v;
@@ -382,7 +387,6 @@ void loop() {
     analogControls[Param2In].value(),
     sRgbSwitch.value(),
     effect_param,
-    shape
   };
 
   // Combine all matrix values into one array
@@ -392,7 +396,8 @@ void loop() {
     matrix_pos_v, 
     matrix_pos_h, 
     matrix_orientation, 
-    matrix_layout
+    matrix_layout,
+    shape // I know that the shape isn't actually a matrix val, but its saved in memory with the matrix values
   };
 
   // Run current mode and pass the control values and matrix values as arguments

@@ -478,7 +478,7 @@ void circles_2d(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsi
   // HSV or RGB
   if (controlVals[RgbSwitch]) {
     uint16_t col = matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]);
-    switch (controlVals[Shape]) {
+    switch (matrixVals[Shape]) {
       case 0:
         matrix->drawRect(x_pos, y_pos, 2*radius, 2*radius, col);
         break;
@@ -494,7 +494,7 @@ void circles_2d(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsi
     CRGB rgb;
     hsv2rgb_rainbow(hsv, rgb);  //convert HSV to RGB
     uint16_t col = matrix->Color(rgb.r, rgb.g, rgb.b);
-    switch (controlVals[Shape]) {
+    switch (matrixVals[Shape]) {
       case 0:
         matrix->drawRect(x_pos, y_pos, 2*radius, 2*radius, col);
         break;
