@@ -1,20 +1,37 @@
+#include "crgb.h"
 #include "FastLED.h"
 #include "effects.h"
 
+const CRGB colours[4][2] PROGMEM = {
+  { CRGB(50, 0, 0),    CRGB(50, 50, 0) },
+  { CRGB(0, 50, 0),    CRGB(0, 50, 50) },
+  { CRGB(0, 0, 50),    CRGB(50, 0, 50) },
+  { CRGB(50, 10, 20),  CRGB(50, 10, 0) }
+};
+
 //===================================UTILITIES=====================================//
 // Color function for FastLED library
-CRGB color(bool use_rgb, uint8_t r_or_h, uint8_t g_or_s, uint8_t b_or_v) {
-  if (use_rgb) {
-    return CRGB(r_or_h, g_or_s, b_or_v);
-  } else {
-    return CHSV(r_or_h, g_or_s, b_or_v);
-  }
+inline CRGB color(bool use_rgb, uint8_t r_or_h, uint8_t g_or_s, uint8_t b_or_v) {
+  return use_rgb ? CRGB(r_or_h, g_or_s, b_or_v) : CHSV(r_or_h, g_or_s, b_or_v);
+}
+
+void clamp_led_block(uint16_t &width, uint16_t mid_point, uint16_t matrixSize, uint8_t &start_pixel) {
+    uint8_t half_width = width >> 1;
+    if (half_width > mid_point) {
+        start_pixel = 0;
+        width -= half_width - mid_point;
+    } else {
+        start_pixel = mid_point - half_width;
+    }
+    if (start_pixel + width >= matrixSize) {
+        width = matrixSize - start_pixel;
+    }
 }
 
 // This allows param1 and param2 pots to be digitally linked with their adjacent inputs,
 // meaning they can function the same as the Red Green & Blue pots and inputs.
 uint8_t computeOutputValue(uint8_t potValue, uint8_t inputValue) {
-    // Scale inputValue from range [0, 255] to [-1.0, 1.0]
+  // Scale inputValue from range [0, 255] to [-1.0, 1.0]
     float scale = (inputValue - 127.0f) / 127.0f;
 
     // Compute new output by shifting around potValue
@@ -27,6 +44,14 @@ uint8_t computeOutputValue(uint8_t potValue, uint8_t inputValue) {
     return (uint8_t)output;
 }
 
+bool fade_leds(CRGB* leds, uint16_t matrixSize, uint8_t fade_increment, unsigned long& last_fade, unsigned long clock, uint8_t fade_time) {
+    if ((clock - last_fade) >= fade_time) {
+        last_fade = clock;
+        fadeToBlackBy(leds, matrixSize, fade_increment);
+        return true;
+    }
+    return false;
+}
 
 //====================================SETTINGS=====================================//
 // Setup number of pixels for strip 
@@ -37,25 +62,6 @@ void setup_matrix(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, un
   static uint8_t lastVals[4];
   static CRGB currentColour;
 
-  // Indexing array to change led colour efficiently
-  CRGB colours[4][2] = {
-    { 
-      CRGB(50, 0, 0),
-      CRGB(50, 50, 0),
-    },
-    { 
-      CRGB(0, 50, 0),
-      CRGB(0, 50, 50),
-    },
-    { 
-      CRGB(0, 0, 50),
-      CRGB(50, 0, 50),
-    },
-    { 
-      CRGB(50, 10, 20),
-      CRGB(50, 10, 0),
-    },
-  };
   CRGB cl = CRGB(0, 127, 127);
   CRGB cr = CRGB(127, 127, 0);
 
@@ -71,12 +77,11 @@ void setup_matrix(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, un
   }
 
   // Check if a parameter has changed and break if found
-  for (uint8_t i = 1; i < 5; i++) {
+  for (uint8_t i = 0; i < 4; i++) {
     const uint8_t controlVal = controlVals[i] < (255 >> 1) ? 0 : 1;
-    if (lastVals[i-1] != controlVal) {
-      lastVals[i-1] = controlVal;
-
-      currentColour = colours[i-1][controlVal];
+    if (lastVals[i] != controlVal) {
+      lastVals[i] = controlVal;
+      memcpy_P(&currentColour, &colours[i][controlVal], sizeof(CRGB));
       last_change = clock;
       break;
     }
@@ -141,53 +146,41 @@ void default_effect(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, 
   int16_t halfWidth = (map((uint16_t)computeOutputValue(controlVals[Param1], controlVals[Param1In]), 0, 255, 1, matrixSize)) >> 1; // Total width halved
   uint16_t pixelMidpoint = map((uint16_t)computeOutputValue(controlVals[Param2], controlVals[Param2In]), 0, 255, 0, matrixSize-1); // Midpoint is 0-indexed so matrixSize-1
 
-  int16_t startPixel = pixelMidpoint - halfWidth;
-  int16_t endPixel = pixelMidpoint + halfWidth;  
+  // Clamp start and end indices
+  uint16_t startPixel = (pixelMidpoint > halfWidth) ? (pixelMidpoint - halfWidth) : 0;
+  uint16_t endPixel = pixelMidpoint + halfWidth;
+  if (endPixel >= matrixSize) endPixel = matrixSize - 1;
 
-  // we've wrapped around, let's wrap back
-  if (startPixel < 0) {
-    startPixel = 0;
-  }
-
-  // clamp to end
-  if (endPixel >= matrixSize) {
-    endPixel = matrixSize - 1;
-  }
-
-  // actually render
+  // Prepare color and clear buffer
+  const CRGB col = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
   FastLED.clear();
 
-  // This determines how many leds are skipped between lit leds
+  // Skip controls "density" of the effect
   uint8_t skip = 1 + (controlVals[EncoderVal] % 16);
 
   // Set the right side leds
-  for (int16_t i = pixelMidpoint; i <= endPixel; i += skip) {
-    leds[i] = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
+  for (uint16_t i = pixelMidpoint; i <= endPixel; i += skip) {
+    leds[i] = col;
   }
 
   // Set the left side leds
-  for (int16_t i = pixelMidpoint - skip; i >= startPixel; i -= skip) {
-    leds[i] = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
+  for (int16_t i = pixelMidpoint - skip; i >= (int16_t)startPixel; i -= skip) {
+    leds[i] = col;
   }
   
   FastLED.show();
 }
-
+/*
 // Pulsing LEDs with fade
 void pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]) {
-  // Allows us to only render when a change has occurred
+  static unsigned long last_pulse, last_fade;
   bool should_render = false;
-  
-  // Keep track of the last pulse and fade for timing
-  static unsigned long last_pulse;
-  static unsigned long last_fade;
 
   // Parameters
-  uint16_t ext_clock = map(controlVals[Param2In], 0, 255, 0, 1); // External clock
-  uint16_t pulse_time = map(controlVals[EncoderVal], 0, 255, 0, 2048); // Time it takes for a pulse to finish
+  bool ext_clock = controlVals[Param2In] > 127; // External clock
+  uint16_t pulse_time = controlVals[EncoderVal] << 3; // Time it takes for a pulse to finish in ms. range of 0-2040
   uint16_t width = map((uint16_t)computeOutputValue(controlVals[Param1], controlVals[Param1In]), 0, 255, 1, matrixSize); // Total width for LED block
-  int16_t mid_point = map((uint16_t)controlVals[Param2], 0, 255, 0, matrixSize-1); // Midpoint for LED block
-  int16_t start = mid_point - (width >> 1); // Start pixel for LED block
+  uint16_t mid_point = map((uint16_t)controlVals[Param2], 0, 255, 0, matrixSize-1); // Midpoint for LED block
   uint16_t fade_time = pulse_time >> 8; // Time it takes to for a fade to finish
   uint8_t fade_increment = (pulse_time > 1300) ? 2 : (pulse_time > 800) ? 6 : 15; // Ratio to fade by each fade
   
@@ -198,56 +191,40 @@ void pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned 
     should_render = true;
     FastLED.clear();
   }
+  
+  // Clamp start pixel and adjust width
+  uint8_t start_pixel;
+  clamp_led_block(width, mid_point, matrixSize, start_pixel);
 
-  // Check if start is out of range
-  if (start < 0) {
-    width += start;
-    start = 0;
-  }
+  // Prepare color and clear buffer
+  const CRGB col = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
 
-  // Shorten width if it exceeds the number of LEDS
-  if (start + width >= matrixSize) {
-    width = (matrixSize - start);
-  }
-
-  // Either use pulse_time OR external clock
-  if (pulse_time <= 40) {
-    if (ext_clock) {
-      CRGB c = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
-      fill_solid(&leds[start], width, c);
-      should_render = true;
-    }
-  } else if ((clock - last_pulse) >= pulse_time) {
+  // Pulse on an external clock OR pulse if the pulse time is reached
+  if ((pulse_time <= 40 && ext_clock) || (clock - last_pulse) >= pulse_time) {
     last_pulse = clock;
-    CRGB c = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
-    fill_solid(&leds[start], width, c);
+    fill_solid(&leds[start_pixel], width, col);
     should_render = true;
   }
 
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-    should_render = true;
-  }
+  should_render = fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
   
   // Render if required
   if (should_render) {
     FastLED.show();
   }
 }
+*/
 
 // A fading trail to moving LEDs
 void trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]) {
 
   // Keep track of the last fade for timing
-  static unsigned long last_fade;
+  static unsigned long last_fade; 
 
   // Parameters
-  uint8_t fade_time = map(controlVals[EncoderVal], 0, 255, 0, 50); // Time it takes to for a fade to finish
+  uint8_t fade_time = controlVals[EncoderVal] >> 2; // Time it takes to for a fade to finish. Range is 0-63
   uint16_t width = map((uint16_t)computeOutputValue(controlVals[Param1], controlVals[Param1In]), 0, 255, 1, matrixSize); // Total width for LED block
-  int16_t mid_point = map((uint16_t)computeOutputValue(controlVals[Param2], controlVals[Param2In]), 0, 255, 0, matrixSize-1); // Midpoint for LED block
-  int16_t start = mid_point - (width >> 1); // Start pixel for LED block
+  uint16_t mid_point = map((uint16_t)computeOutputValue(controlVals[Param2], controlVals[Param2In]), 0, 255, 0, matrixSize-1); // Midpoint for LED block
   uint8_t fade_increment = fade_time > 36 ? 4 : fade_time > 15 ? 10 : 20; // Ratio to fade by each fade
 
   // Initialise everything on first tick 
@@ -257,20 +234,21 @@ void trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned
     FastLED.clear();
   }
 
-  // Check if start is out of range
-  if (start < 0) {
-    width += start;
-    start = 0;
-  }
-
-  // Shorten width if it exceeds the number of LEDS
-  if (start + width >= matrixSize) {
-    width = (matrixSize - start);
-  }
+  // Clamp start pixel and adjust width
+  uint8_t start_pixel;
+  clamp_led_block(width, mid_point, matrixSize, start_pixel);
   
-  // Colour the leds within the width starting at the start point
-  CRGB c = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
-  fill_solid(&leds[start], width, c);
+  // Colour the leds within the width starting at the start pixel
+  fill_solid(
+    &leds[start_pixel], 
+    width, 
+    color(
+      controlVals[RgbSwitch], 
+      controlVals[Red], 
+      controlVals[Green], 
+      controlVals[Blue]
+    )
+  );
 
   // Fade every time the fade_time is reached
   if ((clock - last_fade) >= fade_time) {
@@ -278,49 +256,21 @@ void trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned
     fadeToBlackBy(leds, matrixSize, fade_increment);
   }
 
-  FastLED.show();
-}
+  fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
 
-// Rainbow LEDs
-void rainbow(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]) {
-
-  // Parameters
-  uint16_t width = map((uint16_t)computeOutputValue(controlVals[Param1], controlVals[Param1In]), 0, 255, 1, matrixSize); // Total width for LED block
-  int16_t mid_point = map((uint16_t)computeOutputValue(controlVals[Param2], controlVals[Param2In]), 0, 255, 0, matrixSize-1); // Midpoint for LED block
-  int16_t start = mid_point - (width >> 1); // Start pixel for LED block
-
-  // Check if start is out of range
-  if (start < 0) {
-    width += start;
-    start = 0;
-  }
-
-  // Shorten width if it exceeds the number of LEDS
-  if (start + width >= matrixSize) {
-    width = (matrixSize - start);
-  }
-  
-  // Refresh the LEDS
-  FastLED.clear();
-  fill_rainbow(&leds[start], width, controlVals[Red], controlVals[Green]);
   FastLED.show();
 }
 
 // Rainbow LEDs with pulse
 void rainbow_pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]) {
-  // Allows us to only render when a change has occurred
+  static unsigned long last_pulse, last_fade;
   bool should_render = false;
-  
-  // Keep track of the last pulse and fade for timing
-  static unsigned long last_pulse;
-  static unsigned long last_fade;
 
   // Parameters
-  uint16_t ext_clock = map(controlVals[Param2In], 0, 255, 0, 1); // External clock
-  uint16_t pulse_time = map(controlVals[EncoderVal], 0, 255, 0, 2048); // Time it takes for a pulse to finish
+  bool ext_clock = controlVals[Param2In] > 127; // External clock
+  uint16_t pulse_time = controlVals[EncoderVal] << 3; // Time it takes for a pulse to finish in ms. range of 0-2040
   uint16_t width = map((uint16_t)computeOutputValue(controlVals[Param1], controlVals[Param1In]), 0, 255, 1, matrixSize); // Total width for LED block
-  int16_t mid_point = map((uint16_t)controlVals[Param2], 0, 255, 0, matrixSize-1); // Midpoint for LED block
-  int16_t start = mid_point - (width >> 1); // Start pixel for LED block
+  uint16_t mid_point = map((uint16_t)controlVals[Param2], 0, 255, 0, matrixSize-1); // Midpoint for LED block
   uint16_t fade_time = pulse_time >> 8; // Time it takes to for a fade to finish
   uint8_t fade_increment = (pulse_time > 1300) ? 2 : (pulse_time > 800) ? 6 : 15; // Ratio to fade by each fade
   
@@ -331,37 +281,21 @@ void rainbow_pulse(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, u
     should_render = true;
     FastLED.clear();
   }
-
-  // Check if start is out of range
-  if (start < 0) {
-    width += start;
-    start = 0;
-  }
-
-  // Shorten width if it exceeds the number of LEDS
-  if (start + width >= matrixSize) {
-    width = (matrixSize - start);
-  }
-
-  // Either use pulse_time OR external clock
-  if (pulse_time <= 40) {
-    if (ext_clock) {
-      fill_rainbow(&leds[start], width, controlVals[Red], controlVals[Green]);
-      should_render = true;
-    }
-  } else if ((clock - last_pulse) >= pulse_time) {
-    last_pulse = clock;
-    fill_rainbow(&leds[start], width, controlVals[Red], controlVals[Green]);
-    should_render = true;
-  }
-
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-    should_render = true;
-  }
   
+  // Clamp start pixel and adjust width
+  uint8_t start_pixel;
+  clamp_led_block(width, mid_point, matrixSize, start_pixel);
+
+  // Pulse on an external clock OR pulse if the pulse time is reached
+  if ((pulse_time <= 40 && ext_clock) || (clock - last_pulse) >= pulse_time) {
+    last_pulse = clock;
+    fill_rainbow(&leds[start_pixel], width, controlVals[Red], controlVals[Green]);
+    should_render = true;
+  }
+
+  should_render = fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
+  
+  // Render if required
   if (should_render) {
     FastLED.show();
   }
@@ -374,10 +308,9 @@ void rainbow_trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, 
   static unsigned long last_fade;
 
   // Parameters
-  uint8_t fade_time = map(controlVals[EncoderVal], 0, 255, 0, 50); // Time it takes to for a fade to finish
+  uint8_t fade_time = controlVals[EncoderVal] >> 2; // Time it takes to for a fade to finish. Range is 0-63
   uint16_t width = map((uint16_t)computeOutputValue(controlVals[Param1], controlVals[Param1In]), 0, 255, 1, matrixSize); // Total width for LED block
-  int16_t mid_point = map((uint16_t)computeOutputValue(controlVals[Param2], controlVals[Param2In]), 0, 255, 0, matrixSize-1); // Midpoint for LED block
-  int16_t start = mid_point - (width >> 1); // Start pixel for LED block
+  uint16_t mid_point = map((uint16_t)computeOutputValue(controlVals[Param2], controlVals[Param2In]), 0, 255, 0, matrixSize-1); // Midpoint for LED block
   uint8_t fade_increment = fade_time > 36 ? 4 : fade_time > 15 ? 10 : 20; // Ratio to fade by each fade
 
   // Initialise everything on first tick
@@ -386,25 +319,14 @@ void rainbow_trails(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, 
     FastLED.clear();
   }
 
-  // Check if start is out of range
-  if (start < 0) {
-    width += start;
-    start = 0;
-  }
-  
-  // Shorten width if it exceeds the number of LEDS
-  if (start + width >= matrixSize) {
-    width = (matrixSize - start);
-  }
+  // Clamp start pixel and adjust width
+  uint8_t start_pixel;
+  clamp_led_block(width, mid_point, matrixSize, start_pixel);
   
   // Refresh the LEDS
-  fill_rainbow(&leds[start], width, controlVals[Red], controlVals[Green]);
+  fill_rainbow(&leds[start_pixel], width, controlVals[Red], controlVals[Green]);
 
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-  }
+  fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
 
   FastLED.show();
 }
@@ -423,14 +345,14 @@ void chase(CRGB* leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned 
 
   // Parameters
   uint8_t width = 5;
-  uint8_t chase_time = map(controlVals[Param1], 0, 255, 0, 20); // Time it takes for chase to finish
+  uint8_t chase_time = map(controlVals[Param1], 0, 255, 1, 20); // Time it takes for chase to finish
   uint8_t chase_increment = chase_time > 15 ? 1 : chase_time > 6 ? 2 : 4; // How many pixels to move each chase
-  uint8_t fade_time = map(controlVals[EncoderVal], 0, 255, 0, 50); // Time it takes to for a fade to finish
-  uint8_t fade_increment = fade_time > 36 ? 4 : fade_time > 15 ? 10 : 20; // Ratio to fade by each fade
-  uint8_t ext_clock = map(controlVals[Param2In], 0, 255, 0, 1); // Optional external clock
+  uint8_t fade_time = controlVals[EncoderVal] >> 2; // Time it takes to for a fade to finish. Range is 0-63
+  uint8_t fade_increment = fade_time > 38 ? 4 : fade_time > 20 ? 10 : 20; // Ratio to fade by each fade
+  bool ext_clock = controlVals[Param2In] > 127; // External clock
   uint8_t manual_clock = controlVals[Param2]; // Manual clock
   
-  static uint8_t start;
+  static uint8_t start_index;
   static bool prev_trigger;
 
   // Initial setup on the first tick
@@ -438,49 +360,47 @@ void chase(CRGB* leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned 
     last_chase = 0;
     last_fade = 0;
     last = false;
-    start = 0;
+    start_index = 0;
     should_render = true;
     FastLED.clear();
   }
 
-  // Decide on what clock to use
+  bool trigger = false;
+  bool untrigger = false;
   if (manual_clock == 0) {
-    if (ext_clock && !prev_trigger) {
-      start = 0;
-      should_render = true;
-      prev_trigger = true;
-      last = false;
-      last_chase = 0;
-      last_fade = 0;
-    } else if (!ext_clock) {
-      prev_trigger = false;
-    }
+    // Use external clock
+    trigger = ext_clock && !prev_trigger;
+    untrigger = !ext_clock;
   } else {
-    if (manual_clock >= 127 && !prev_trigger) {
-      start = 0;
-      should_render = true;
-      prev_trigger = true;
-      last = false;
-      last_chase = 0;
-      last_fade = 0;
-    } else if (controlVals[Param2] < 127) {
-      prev_trigger = false;
-    }
+    // Use manual clock
+    trigger = (manual_clock >= 127) && !prev_trigger;
+    untrigger = (controlVals[Param2] < 127);
+  }
+
+  if (trigger) {
+    start_index = 0;
+    should_render = true;
+    prev_trigger = true;
+    last = false;
+    last_chase = 0;
+    last_fade = 0;
+  } else if (untrigger) {
+    prev_trigger = false;
   }
 
   // Shorten width if it exceeds the number of LEDS
-  if (start + width >= end_index) {
-    width = (end_index - start);
+  if (start_index + width >= end_index) {
+    width = (end_index - start_index);
   }
     
   // Fill the leds with certain colour
-  CRGB c = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
-  fill_solid(&leds[start], width, c);
+  CRGB col = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
+  fill_solid(&leds[start_index], width, col);
   
   // Make sure to render the last led
-  if (start >= end_index) {
+  if (start_index >= end_index) {
     if (!last) {
-        leds[end_index] = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
+        leds[end_index] = col;
         last = true;
         should_render = true;
       } else { 
@@ -491,140 +411,16 @@ void chase(CRGB* leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned 
   } else {
     if ((clock - last_chase) >= chase_time) {
       last_chase = clock;
-      if (start + chase_increment <= end_index) {
-        start += chase_increment;
-      } else if (chase_increment != 1 && start < end_index) {
-        start++;
+      if (start_index + chase_increment <= end_index) {
+        start_index += chase_increment;
+      } else if (chase_increment != 1 && start_index < end_index) {
+        start_index++;
       }
       should_render = true;
     }
   }
 
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-    should_render = true;
-  }
-
-  if (should_render) {
-    FastLED.show();
-  }
-}
-
-// Double ended chase on trigger
-void bounce(CRGB* leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigned long clock, uint8_t first_tick, uint8_t controlVals[], uint8_t matrixVals[]) {
-  bool should_render = false;
-  uint8_t end_index = matrixSize - 1;
-  
-  // Keep track of the last bounce and fade for timing
-  static unsigned long last_bounce;
-  static unsigned long last_fade;
-
-  // Lets us know if we are up to the end two LEDS
-  static bool last;
-
-  // Parameters
-  uint8_t width = 10;
-  uint8_t bounce_time = map(controlVals[Param1], 0, 255, 0, 20); // Time it takes for chase to finish
-  uint8_t bounce_increment = bounce_time > 15 ? 1 : bounce_time > 6 ? 2 : 4; // How many pixels to move each chase
-  uint8_t fade_time = map(controlVals[EncoderVal], 0, 255, 0, 50); // Time it takes to for a fade to finish
-  uint8_t fade_increment = fade_time > 36 ? 4 : fade_time > 15 ? 10 : 20; // Ratio to fade by each fade
-  uint8_t ext_clock = map(controlVals[Param2In], 0, 255, 0, 1); // Optional external clock
-  uint8_t manual_clock = controlVals[Param2]; // Manual clock
-
-  // Keep track of left and right positions and if it's been triggered already
-  static uint8_t left;
-  static uint8_t right;
-  static bool prev_trigger;
-
-  // Initial setup on the first tick
-  if (first_tick) {
-    last_bounce = 0;
-    last_fade = 0;
-    left = 0;
-    right = end_index;
-    should_render = true;
-    last = false;
-    FastLED.clear();
-  }
-
-  // Decide on what clock to use
-  if (manual_clock == 0) {
-    if (ext_clock && !prev_trigger) {
-      left = 0;
-      right = end_index;
-      should_render = true;
-      prev_trigger = true;
-      last = false;
-      last_bounce = 0;
-      last_fade = 0;
-    } else if (!ext_clock) {
-      prev_trigger = false;
-    }
-  } else {
-    if (manual_clock >= 127 && !prev_trigger) {
-      left = 0;
-      right = end_index;
-      should_render = true;
-      prev_trigger = true;
-      last = false;
-      last_bounce = 0;
-      last_fade = 0;
-    } else if (controlVals[Param2] < 127) {
-      prev_trigger = false;
-    }
-  }
-
-  // Render LEDS at width if time has been reached
-  if ((clock - last_bounce) >= bounce_time) {
-    last_bounce = clock;
-
-    // Make sure to render the last two leds
-    if (left >= end_index && right <= 0) {
-      if (!last) {
-        leds[0] = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
-        leds[end_index] = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
-        last = true;
-        should_render = true;
-      } else { 
-        should_render = false;
-      }
-      
-    // Otherwise render both left and right blocks 
-    } else {
-      uint8_t w = left + width >= end_index ? (end_index - left) : width;
-      for (int i = 0; i < w; i++) {
-        leds[left + i] = color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]);
-      }
-
-      w = right + width > end_index ? (end_index - right + 1) : width;
-      for (int i = 0; i < w; i++) {
-        CRGB c = leds[right + i];
-        leds[right + i] = blend(c, color(controlVals[RgbSwitch], controlVals[Red], controlVals[Green], controlVals[Blue]), 200);
-      }
-      should_render = true;
-    }
-
-    // Then increment them
-    if (left + bounce_increment <= end_index) {
-      left += bounce_increment;
-    } else if (bounce_increment != 1 && left < end_index) {
-      left++;
-    }
-    if (right - bounce_increment >= 0) {
-      right -= bounce_increment;
-    } else if (bounce_increment != 1 && right > 0) {
-      right--;
-    }
-  }
-
-  // Fade every time the fade_time is reached
-  if ((clock - last_fade) >= fade_time) {
-    last_fade = clock;
-    fadeToBlackBy(leds, matrixSize, fade_increment);
-    should_render = true;
-  }
+  should_render = fade_leds(leds, matrixSize, fade_increment, last_fade, clock, fade_time);
 
   if (should_render) {
     FastLED.show();
@@ -636,11 +432,10 @@ void sparkle(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigne
   bool should_render = false;
   
   // Last fade time
-  static unsigned long last_sparkle;
-  static unsigned long last_fade;
+  static unsigned long last_sparkle, last_fade;
   
   // Parameters
-  uint8_t sparkle_chance = map(controlVals[Param1], 0, 255, 1, 255); // Chance of sparkle to occur
+  uint8_t sparkle_chance = controlVals[Param1] == 0 ? 1 : controlVals[Param1]; // Chance of sparkle to occur and ensure it isn't 0
   uint8_t fade_increment = map(computeOutputValue(controlVals[Param2], controlVals[Param2In]), 0, 255, 20, 255); // How much to fade by each loop
   uint8_t sparkle_num = map(controlVals[EncoderVal], 0, 255, 1, 50); // Number of sparkles to add each time one occurs
   uint8_t halfRange = controlVals[Param1In] >> 1;
@@ -659,7 +454,6 @@ void sparkle(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsigne
 
   FastLED.show();
 }
-
 
 //==================================Two Dimension==================================//
 // Draws a circle
@@ -683,12 +477,34 @@ void circles_2d(CRGB *leds, FastLED_NeoMatrix *matrix, uint16_t matrixSize, unsi
 
   // HSV or RGB
   if (controlVals[RgbSwitch]) {
-    matrix->drawCircle(x_pos, y_pos, radius, matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]));
+    uint16_t col = matrix->Color(controlVals[Red], controlVals[Green], controlVals[Blue]);
+    switch (matrixVals[Shape]) {
+      case 0:
+        matrix->drawRect(x_pos, y_pos, 2*radius, 2*radius, col);
+        break;
+      case 1:
+        matrix->drawCircle(x_pos, y_pos, radius, col);
+        break;
+      case 2:
+        matrix->drawTriangle(x_pos, y_pos, x_pos-(radius>>1), y_pos-radius, x_pos+(radius>>1), y_pos-radius, col);
+        break;
+    }
   } else {
     CHSV hsv = CHSV(controlVals[Red], controlVals[Green], controlVals[Blue]);
     CRGB rgb;
     hsv2rgb_rainbow(hsv, rgb);  //convert HSV to RGB
-    matrix->drawCircle(x_pos, y_pos, radius, matrix->Color(rgb.r, rgb.g, rgb.b));
+    uint16_t col = matrix->Color(rgb.r, rgb.g, rgb.b);
+    switch (matrixVals[Shape]) {
+      case 0:
+        matrix->drawRect(x_pos, y_pos, 2*radius, 2*radius, col);
+        break;
+      case 1:
+        matrix->drawCircle(x_pos, y_pos, radius, col);
+        break;
+      case 2:
+        matrix->drawTriangle(x_pos, y_pos, x_pos-(radius/2), y_pos-radius, x_pos+(radius/2), y_pos-radius, col);
+        break;
+    }
   }
 
   if ((clock - last_decay) >= 3) {
